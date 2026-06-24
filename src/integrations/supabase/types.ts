@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image: string | null
+          is_active: boolean
+          name: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image?: string | null
+          is_active?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image?: string | null
+          is_active?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          brand: string | null
+          caliber: string | null
+          category_slug: string | null
+          compare_at_price: number | null
+          created_at: string
+          description: string | null
+          id: string
+          images: Json
+          is_active: boolean
+          is_featured: boolean
+          licence_required: boolean
+          low_stock_threshold: number
+          name: string
+          power_plant: string | null
+          price: number
+          seo_description: string | null
+          seo_title: string | null
+          short_description: string | null
+          sku: string | null
+          slug: string
+          specifications: Json
+          stock: number
+          sub_category: string | null
+          tags: string[]
+          updated_at: string
+          velocity: string | null
+          weight: number | null
+        }
+        Insert: {
+          brand?: string | null
+          caliber?: string | null
+          category_slug?: string | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          is_active?: boolean
+          is_featured?: boolean
+          licence_required?: boolean
+          low_stock_threshold?: number
+          name: string
+          power_plant?: string | null
+          price: number
+          seo_description?: string | null
+          seo_title?: string | null
+          short_description?: string | null
+          sku?: string | null
+          slug: string
+          specifications?: Json
+          stock?: number
+          sub_category?: string | null
+          tags?: string[]
+          updated_at?: string
+          velocity?: string | null
+          weight?: number | null
+        }
+        Update: {
+          brand?: string | null
+          caliber?: string | null
+          category_slug?: string | null
+          compare_at_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          images?: Json
+          is_active?: boolean
+          is_featured?: boolean
+          licence_required?: boolean
+          low_stock_threshold?: number
+          name?: string
+          power_plant?: string | null
+          price?: number
+          seo_description?: string | null
+          seo_title?: string | null
+          short_description?: string | null
+          sku?: string | null
+          slug?: string
+          specifications?: Json
+          stock?: number
+          sub_category?: string | null
+          tags?: string[]
+          updated_at?: string
+          velocity?: string | null
+          weight?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_slug_fkey"
+            columns: ["category_slug"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
