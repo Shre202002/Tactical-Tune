@@ -24,6 +24,8 @@ export type ProductRow = {
   caliber: string | null;
   velocity: string | null;
   specifications: ProductSpec[];
+  seo_title: string | null;
+  seo_description: string | null;
 };
 
 export type CategoryRow = {
@@ -36,7 +38,7 @@ export type CategoryRow = {
 };
 
 const PRODUCT_COLS =
-  "id,name,slug,brand,short_description,description,sku,price,compare_at_price,category_slug,sub_category,tags,images,stock,is_featured,licence_required,power_plant,caliber,velocity,specifications";
+  "id,name,slug,brand,short_description,description,sku,price,compare_at_price,category_slug,sub_category,tags,images,stock,is_featured,licence_required,power_plant,caliber,velocity,specifications,seo_title,seo_description";
 
 export async function fetchCategories(): Promise<CategoryRow[]> {
   const { data, error } = await supabase
@@ -58,10 +60,28 @@ export async function fetchFeaturedProducts(limit = 8): Promise<ProductRow[]> {
   return (data ?? []) as unknown as ProductRow[];
 }
 
-export async function fetchProductCountByCategory(): Promise<Record<string, number>> {
+export async function fetchProductBySlug(slug: string): Promise<ProductRow | null> {
   const { data, error } = await supabase
     .from("products")
-    .select("category_slug");
+    .select(PRODUCT_COLS)
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as unknown as ProductRow | null;
+}
+
+export async function fetchAllProducts(): Promise<ProductRow[]> {
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_COLS)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as ProductRow[];
+}
+
+export async function fetchProductCountByCategory(): Promise<Record<string, number>> {
+  const { data, error } = await supabase.from("products").select("category_slug");
   if (error) throw error;
   const counts: Record<string, number> = {};
   for (const row of data ?? []) {

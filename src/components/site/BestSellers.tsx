@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Star, ShoppingCart } from "lucide-react";
 import { fetchFeaturedProducts, type ProductRow } from "@/lib/catalog";
 import fallbackImg from "@/assets/cat-rifles.jpg";
@@ -16,7 +17,7 @@ function ProductCard({ p }: { p: ProductRow }) {
   const lowStock = p.stock > 0 && p.stock <= 5;
 
   return (
-    <article className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
+    <Link to="/products/$slug" params={{ slug: p.slug }} className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
       <div className="relative aspect-square bg-muted overflow-hidden">
         <img
           src={img}
@@ -69,7 +70,7 @@ function ProductCard({ p }: { p: ProductRow }) {
           )}
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

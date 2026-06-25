@@ -1,7 +1,17 @@
 import { Link } from "@tanstack/react-router";
-import { Search, ShoppingCart, User, Menu } from "lucide-react";
+import { Search, ShoppingCart, User, Menu, LogOut, LayoutDashboard, Package } from "lucide-react";
+import { useAuth, signOut } from "@/lib/auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Navbar() {
+  const { user, isAdmin } = useAuth();
+
   return (
     <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md border-b border-border">
       <div className="container-tactical flex items-center justify-between h-16 md:h-20">
@@ -26,15 +36,35 @@ export function Navbar() {
           <button aria-label="Search" className="p-2 hover:text-primary transition-colors">
             <Search className="w-5 h-5" />
           </button>
-          <button aria-label="Account" className="p-2 hover:text-primary transition-colors hidden sm:block">
-            <User className="w-5 h-5" />
-          </button>
-          <button aria-label="Cart" className="p-2 hover:text-primary transition-colors relative">
+
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button aria-label="Account" className="p-2 hover:text-primary">
+                  <User className="w-5 h-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <div className="px-2 py-1.5 text-xs text-muted-foreground truncate max-w-[200px]">{user.email}</div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild><Link to="/account">Account</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild><Link to="/orders"><Package className="w-4 h-4 mr-2" /> My orders</Link></DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin"><LayoutDashboard className="w-4 h-4 mr-2" /> Admin</Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => signOut()}><LogOut className="w-4 h-4 mr-2" /> Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link to="/auth" className="p-2 hover:text-primary text-sm text-display hidden sm:inline">Sign in</Link>
+          )}
+
+          <Link to="/cart" aria-label="Cart" className="p-2 hover:text-primary transition-colors relative">
             <ShoppingCart className="w-5 h-5" />
-            <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-              0
-            </span>
-          </button>
+          </Link>
           <button aria-label="Menu" className="p-2 md:hidden">
             <Menu className="w-5 h-5" />
           </button>
