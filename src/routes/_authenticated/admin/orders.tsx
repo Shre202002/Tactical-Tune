@@ -42,7 +42,7 @@ function AdminOrders() {
   const profileMap = Object.fromEntries(profiles.map((p: any) => [p.id, p]));
 
   async function updateStatus(id: string, status: string) {
-    const { error } = await supabase.from("orders").update({ status, payment_completed_at: status === "paid" ? new Date().toISOString() : null }).eq("id", id);
+    const { error } = await supabase.from("orders").update({ status: status as any, payment_completed_at: status === "paid" ? new Date().toISOString() : null }).eq("id", id);
     if (error) toast.error(error.message);
     else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["admin-orders"] }); }
   }
