@@ -15,6 +15,7 @@ function ProductCard({ p }: { p: ProductRow }) {
       ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100)
       : null;
   const lowStock = p.stock > 0 && p.stock <= 5;
+  const reviewCount = (Number.parseInt(p.id.slice(-4), 16) % 200) + 40;
 
   return (
     <Link to="/products/$slug" params={{ slug: p.slug }} className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
@@ -61,7 +62,7 @@ function ProductCard({ p }: { p: ProductRow }) {
           {[...Array(5)].map((_, i) => (
             <Star key={i} className="w-3.5 h-3.5 fill-warning text-warning" />
           ))}
-          <span className="text-xs text-muted-foreground ml-1">({Math.floor(Math.random() * 200) + 40})</span>
+          <span className="text-xs text-muted-foreground ml-1">({reviewCount})</span>
         </div>
         <div className="flex items-baseline gap-2 mt-auto">
           <span className="text-display text-xl text-foreground">{formatINR(p.price)}</span>
@@ -90,7 +91,7 @@ function SkeletonCard() {
 export function BestSellers() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["featured-products"],
-    queryFn: () => fetchFeaturedProducts(8),
+    queryFn: () => fetchFeaturedProducts({ data: { limit: 8 } }),
   });
 
   return (

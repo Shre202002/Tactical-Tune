@@ -1,92 +1,42 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
-export type ProductImage = { url: string; alt: string; order: number };
-export type ProductSpec = { key: string; value: string };
+export type {
+  CategoryRow,
+  ProductImage,
+  ProductRow,
+  ProductSpec,
+} from "./domain";
 
-export type ProductRow = {
-  id: string;
-  name: string;
-  slug: string;
-  brand: string | null;
-  short_description: string | null;
-  description: string | null;
-  sku: string | null;
-  price: number;
-  compare_at_price: number | null;
-  category_slug: string | null;
-  sub_category: string | null;
-  tags: string[];
-  images: ProductImage[];
-  stock: number;
-  is_featured: boolean;
-  licence_required: boolean;
-  power_plant: string | null;
-  caliber: string | null;
-  velocity: string | null;
-  specifications: ProductSpec[];
-  seo_title: string | null;
-  seo_description: string | null;
-};
+export const fetchCategories = createServerFn({ method: "GET" }).handler(async () => {
+  const { listCategories } = await import("@/server/catalog.server");
+  return listCategories();
+});
 
-export type CategoryRow = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  image: string | null;
-  sort_order: number;
-};
+export const fetchFeaturedProducts = createServerFn({ method: "GET" })
+  .validator(z.object({ limit: z.number().int().min(1).max(24).default(8) }))
+  .handler(async ({ data }) => {
+    const { listFeaturedProducts } = await import("@/server/catalog.server");
+    return listFeaturedProducts(data.limit);
+  });
 
-const PRODUCT_COLS =
-  "id,name,slug,brand,short_description,description,sku,price,compare_at_price,category_slug,sub_category,tags,images,stock,is_featured,licence_required,power_plant,caliber,velocity,specifications,seo_title,seo_description";
+export const fetchProductBySlug = createServerFn({ method: "GET" })
+  .validator(z.object({ slug: z.string().min(1).max(180) }))
+  .handler(async ({ data }) => {
+    const { findProductBySlug } = await import("@/server/catalog.server");
+    return findProductBySlug(data.slug);
+  });
 
-export async function fetchCategories(): Promise<CategoryRow[]> {
-  const { data, error } = await supabase
-    .from("categories")
-    .select("id,name,slug,description,image,sort_order")
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as CategoryRow[];
-}
+export const fetchAllProducts = createServerFn({ method: "GET" }).handler(async () => {
+  const { requireAdmin } = await import("@/server/auth.server");
+  const { listAllProducts } = await import("@/server/catalog.server");
+  await requireAdmin();
+  return listAllProducts();
+});
 
-export async function fetchFeaturedProducts(limit = 8): Promise<ProductRow[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_COLS)
-    .eq("is_featured", true)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return (data ?? []) as unknown as ProductRow[];
-}
-
-export async function fetchProductBySlug(slug: string): Promise<ProductRow | null> {
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_COLS)
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (error) throw error;
-  return (data ?? null) as unknown as ProductRow | null;
-}
-
-export async function fetchAllProducts(): Promise<ProductRow[]> {
-  const { data, error } = await supabase
-    .from("products")
-    .select(PRODUCT_COLS)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as unknown as ProductRow[];
-}
-
-export async function fetchProductCountByCategory(): Promise<Record<string, number>> {
-  const { data, error } = await supabase.from("products").select("category_slug");
-  if (error) throw error;
-  const counts: Record<string, number> = {};
-  for (const row of data ?? []) {
-    const slug = (row as { category_slug: string | null }).category_slug;
-    if (slug) counts[slug] = (counts[slug] ?? 0) + 1;
-  }
-  return counts;
-}
+export const fetchProductCountByCategory = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const { productCountsByCategory } = await import("@/server/catalog.server");
+    return productCountsByCategory();
+  },
+);

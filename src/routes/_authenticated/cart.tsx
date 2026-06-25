@@ -3,8 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
-import { fetchCartItems, updateCartItem, removeCartItem } from "@/lib/cart";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  checkoutCart,
+  fetchCartItems,
+  removeCartItem,
+  updateCartItem,
+} from "@/lib/cart";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,58 +20,38 @@ function CartPage() {
   const qc = useQueryClient();
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["cart"],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) return [];
-      return fetchCartItems(data.user.id);
-    },
+    queryFn: () => fetchCartItems(),
   });
 
   const subtotal = items.reduce((s, it) => s + Number(it.unit_price) * it.quantity, 0);
 
   async function changeQty(itemId: string, qty: number) {
-    await updateCartItem(itemId, qty);
-    qc.invalidateQueries({ queryKey: ["cart"] });
+    try {
+      await updateCartItem({ data: { itemId, quantity: qty } });
+      qc.invalidateQueries({ queryKey: ["cart"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update cart");
+    }
   }
 
   async function remove(itemId: string) {
-    await removeCartItem(itemId);
-    toast.success("Removed");
-    qc.invalidateQueries({ queryKey: ["cart"] });
+    try {
+      await removeCartItem({ data: { itemId } });
+      toast.success("Removed");
+      qc.invalidateQueries({ queryKey: ["cart"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove item");
+    }
   }
 
   async function checkout() {
-    const { data } = await supabase.auth.getUser();
-    if (!data.user) return;
-    const total = subtotal;
-    const { data: order, error } = await supabase
-      .from("orders")
-      .insert({
-        user_id: data.user.id,
-        subtotal,
-        total,
-        status: "pending_payment",
-        payment_initiated_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await checkoutCart();
+      toast.success("Order created — payment integration coming soon");
+      window.location.href = "/orders";
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Checkout failed");
     }
-    const orderItems = items.map((it) => ({
-      order_id: order.id,
-      product_id: it.product_id,
-      product_name: it.products?.name ?? "",
-      product_slug: it.products?.slug ?? "",
-      product_image: it.products?.images?.[0]?.url ?? null,
-      unit_price: it.unit_price,
-      quantity: it.quantity,
-      line_total: Number(it.unit_price) * it.quantity,
-    }));
-    await supabase.from("order_items").insert(orderItems);
-    toast.success("Order created — payment integration coming soon");
-    window.location.href = "/orders";
   }
 
   return (

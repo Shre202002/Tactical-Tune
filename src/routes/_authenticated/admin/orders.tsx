@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchAdminOrders,
+  setAdminOrderStatus,
+} from "@/lib/admin";
+import type { OrderStatus } from "@/lib/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -18,33 +22,17 @@ function AdminOrders() {
 
   const { data: orders = [] } = useQuery({
     queryKey: ["admin-orders", filter],
-    queryFn: async () => {
-      let q = supabase
-        .from("orders")
-        .select("id,order_number,status,total,created_at,user_id,order_items(product_name,quantity)")
-        .order("created_at", { ascending: false });
-      if (filter !== "all") q = q.eq("status", filter);
-      const { data } = await q;
-      return data ?? [];
-    },
+    queryFn: () => fetchAdminOrders({ data: { filter } }),
   });
 
-  // Fetch profile info separately to avoid join headaches
-  const { data: profiles = [] } = useQuery({
-    queryKey: ["admin-orders-profiles", orders.map((o: any) => o.user_id).join(",")],
-    enabled: orders.length > 0,
-    queryFn: async () => {
-      const ids = Array.from(new Set(orders.map((o: any) => o.user_id)));
-      const { data } = await supabase.from("profiles").select("id,email,full_name").in("id", ids);
-      return data ?? [];
-    },
-  });
-  const profileMap = Object.fromEntries(profiles.map((p: any) => [p.id, p]));
-
-  async function updateStatus(id: string, status: string) {
-    const { error } = await supabase.from("orders").update({ status: status as any, payment_completed_at: status === "paid" ? new Date().toISOString() : null }).eq("id", id);
-    if (error) toast.error(error.message);
-    else { toast.success("Updated"); qc.invalidateQueries({ queryKey: ["admin-orders"] }); }
+  async function updateStatus(id: string, status: OrderStatus) {
+    try {
+      await setAdminOrderStatus({ data: { orderId: id, status } });
+      toast.success("Updated");
+      qc.invalidateQueries({ queryKey: ["admin-orders"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update order");
+    }
   }
 
   return (
@@ -71,19 +59,19 @@ function AdminOrders() {
             </tr>
           </thead>
           <tbody>
-            {orders.map((o: any) => (
+            {orders.map((o) => (
               <tr key={o.id} className="border-t border-border">
                 <td className="p-3 font-mono text-xs">{o.order_number}</td>
                 <td className="p-3">
-                  <div>{profileMap[o.user_id]?.full_name ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground">{profileMap[o.user_id]?.email}</div>
+                  <div>{o.customer?.full_name ?? "—"}</div>
+                  <div className="text-xs text-muted-foreground">{o.customer?.email}</div>
                 </td>
-                <td className="p-3 text-xs">{o.order_items?.map((it: any) => `${it.product_name} ×${it.quantity}`).join(", ")}</td>
+                <td className="p-3 text-xs">{o.order_items.map((it) => `${it.product_name} ×${it.quantity}`).join(", ")}</td>
                 <td className="p-3 text-right">₹{Number(o.total).toLocaleString("en-IN")}</td>
                 <td className="p-3"><Badge variant={o.status === "paid" || o.status === "fulfilled" ? "default" : "secondary"}>{o.status}</Badge></td>
                 <td className="p-3 text-xs text-muted-foreground">{new Date(o.created_at).toLocaleDateString()}</td>
                 <td className="p-3">
-                  <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value)} className="text-xs border border-input rounded px-2 py-1 bg-background">
+                  <select value={o.status} onChange={(e) => updateStatus(o.id, e.target.value as OrderStatus)} className="text-xs border border-input rounded px-2 py-1 bg-background">
                     {STATUSES.slice(1).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </td>

@@ -1,7 +1,10 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
+import {
+  createAccount,
+  getCurrentUser,
+  signInWithPassword,
+} from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,8 +29,8 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/" });
+    getCurrentUser().then((user) => {
+      if (user) navigate({ to: "/" });
     });
   }, [navigate]);
 
@@ -36,38 +39,24 @@ function AuthPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: { full_name: fullName },
+        await createAccount({
+          data: {
+            email,
+            password,
+            fullName,
           },
         });
-        if (error) throw error;
-        toast.success("Account created. Check your email if confirmation is required.");
+        toast.success("Account created");
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await signInWithPassword({ data: { email, password } });
         toast.success("Signed in");
       }
-      navigate({ to: "/" });
+      window.location.href = "/";
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleGoogle() {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Google sign-in failed");
-      return;
-    }
-    if (!result.redirected) navigate({ to: "/" });
   }
 
   return (
@@ -79,16 +68,6 @@ function AuthPage() {
         <h1 className="text-display text-3xl text-center mb-6">
           {mode === "signin" ? "Sign in" : "Create account"}
         </h1>
-
-        <Button onClick={handleGoogle} variant="outline" className="w-full mb-4">
-          Continue with Google
-        </Button>
-
-        <div className="flex items-center gap-3 my-4">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground">OR</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
 
         <form onSubmit={handleEmail} className="space-y-3">
           {mode === "signup" && (
@@ -103,7 +82,7 @@ function AuthPage() {
           </div>
           <div>
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <Input id="password" type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           <Button type="submit" disabled={loading} className="w-full btn-tactical-glow">
             {loading ? "..." : mode === "signin" ? "Sign in" : "Create account"}

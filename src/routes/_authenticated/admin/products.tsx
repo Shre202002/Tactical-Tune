@@ -1,7 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteAdminProduct,
+  fetchAdminCategories,
+  fetchAdminProducts,
+  saveAdminProduct,
+  uploadProductImage,
+} from "@/lib/admin";
+import type { CategoryRow, ProductRow } from "@/lib/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,18 +56,12 @@ function AdminProducts() {
 
   const { data: products = [] } = useQuery({
     queryKey: ["admin-products"],
-    queryFn: async () => {
-      const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAdminProducts(),
   });
 
   const { data: categories = [] } = useQuery({
     queryKey: ["admin-categories"],
-    queryFn: async () => {
-      const { data } = await supabase.from("categories").select("slug,name").order("name");
-      return data ?? [];
-    },
+    queryFn: () => fetchAdminCategories(),
   });
 
   function openNew() {
@@ -68,7 +69,7 @@ function AdminProducts() {
     setOpen(true);
   }
 
-  function openEdit(p: any) {
+  function openEdit(p: ProductRow) {
     setEditing({
       id: p.id,
       name: p.name, slug: p.slug, brand: p.brand ?? "",
@@ -83,49 +84,44 @@ function AdminProducts() {
   }
 
   async function handleFileUpload(file: File): Promise<string | null> {
-    const ext = file.name.split(".").pop() || "jpg";
-    const path = `admin-uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage.from("product-images").upload(path, file);
-    if (error) {
-      toast.error(error.message);
-      return null;
-    }
-    // Create long-lived signed URL
-    const { data } = await supabase.storage.from("product-images").createSignedUrl(path, 3153600000);
-    return data?.signedUrl ?? null;
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Could not read image."));
+      reader.onload = () => {
+        const result = String(reader.result);
+        resolve(result.slice(result.indexOf(",") + 1));
+      };
+      reader.readAsDataURL(file);
+    });
+    return uploadProductImage({
+      data: {
+        filename: file.name,
+        mimeType: file.type || "application/octet-stream",
+        base64,
+      },
+    });
   }
 
   async function save() {
     if (!editing) return;
-    const { id, image_url, ...rest } = editing;
-    const payload: any = {
-      ...rest,
-      images: image_url ? [{ url: image_url, alt: editing.name, order: 0 }] : [],
-      specifications: [],
-      tags: [],
-    };
-    let err;
-    if (id) {
-      ({ error: err } = await supabase.from("products").update(payload).eq("id", id));
-    } else {
-      ({ error: err } = await supabase.from("products").insert(payload));
+    try {
+      await saveAdminProduct({ data: editing });
+      toast.success("Saved");
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["admin-products"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save product");
     }
-    if (err) {
-      toast.error(err.message);
-      return;
-    }
-    toast.success("Saved");
-    setOpen(false);
-    qc.invalidateQueries({ queryKey: ["admin-products"] });
   }
 
   async function del(id: string) {
     if (!confirm("Delete this product?")) return;
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await deleteAdminProduct({ data: { id } });
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["admin-products"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete product");
     }
   }
 
@@ -149,7 +145,7 @@ function AdminProducts() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p: any) => (
+            {products.map((p) => (
               <tr key={p.id} className="border-t border-border">
                 <td className="p-3">{p.name}</td>
                 <td className="p-3 text-muted-foreground">{p.brand}</td>
@@ -180,7 +176,7 @@ function AdminProducts() {
                 <div><Label>Category</Label>
                   <select className="w-full border border-input rounded px-3 py-2 bg-background" value={editing.category_slug} onChange={(e) => setEditing({ ...editing, category_slug: e.target.value })}>
                     <option value="">—</option>
-                    {categories.map((c: any) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                    {categories.map((c: CategoryRow) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
                   </select>
                 </div>
                 <div><Label>Price ₹</Label><Input type="number" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} /></div>

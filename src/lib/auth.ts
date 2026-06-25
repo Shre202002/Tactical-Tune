@@ -1,67 +1,75 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { User } from "@supabase/supabase-js";
+import { useQuery } from "@tanstack/react-query";
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
-export type AppRole = "super_admin" | "admin" | "customer";
+import type { AppRole, PublicUser } from "./domain";
+
+export type { AppRole, PublicUser };
 
 export interface AuthState {
-  user: User | null;
+  user: PublicUser | null;
   loading: boolean;
   roles: AppRole[];
   isAdmin: boolean;
   isSuperAdmin: boolean;
 }
 
+export const getCurrentUser = createServerFn({ method: "GET" }).handler(async () => {
+  const { getCurrentUserFromSession } = await import("@/server/auth.server");
+  return getCurrentUserFromSession();
+});
+
+export const signInWithPassword = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { loginUser } = await import("@/server/auth.server");
+    return loginUser(data);
+  });
+
+export const createAccount = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      email: z.string().email(),
+      password: z.string().min(8),
+      fullName: z.string().min(1).max(120),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { registerUser } = await import("@/server/auth.server");
+    return registerUser(data);
+  });
+
+const logoutServer = createServerFn({ method: "POST" }).handler(async () => {
+  const { logoutUser } = await import("@/server/auth.server");
+  await logoutUser();
+  return { success: true };
+});
+
 export function useAuth(): AuthState {
-  const [user, setUser] = useState<User | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: user = null, isLoading } = useQuery({
+    queryKey: ["current-user"],
+    queryFn: () => getCurrentUser(),
+    staleTime: 30_000,
+    retry: false,
+  });
 
-  useEffect(() => {
-    let mounted = true;
-
-    // Subscribe synchronously first.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setUser(session?.user ?? null);
-      // Defer role fetch
-      if (session?.user) {
-        setTimeout(() => loadRoles(session.user.id), 0);
-      } else {
-        setRoles([]);
-      }
-    });
-
-    // Then hydrate from current session.
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setUser(data.session?.user ?? null);
-      if (data.session?.user) {
-        loadRoles(data.session.user.id).finally(() => mounted && setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
-    async function loadRoles(uid: string) {
-      const { data } = await supabase.from("user_roles").select("role").eq("user_id", uid);
-      if (!mounted) return;
-      setRoles((data ?? []).map((r) => r.role as AppRole));
-    }
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  const isSuperAdmin = roles.includes("super_admin");
-  const isAdmin = isSuperAdmin || roles.includes("admin");
-
-  return { user, loading, roles, isAdmin, isSuperAdmin };
+  const isSuperAdmin = user?.role === "super_admin";
+  const isAdmin = isSuperAdmin || user?.role === "admin";
+  return {
+    user,
+    loading: isLoading,
+    roles: user ? [user.role] : [],
+    isAdmin,
+    isSuperAdmin,
+  };
 }
 
 export async function signOut() {
-  await supabase.auth.signOut();
+  await logoutServer();
   window.location.href = "/";
 }

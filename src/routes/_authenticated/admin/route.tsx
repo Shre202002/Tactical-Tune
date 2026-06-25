@@ -1,16 +1,15 @@
 import { createFileRoute, Outlet, Link, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { LayoutDashboard, Package, ShoppingBag, Users, Tag, FolderTree } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async () => {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) throw redirect({ to: "/auth" });
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", u.user.id);
-    const roles = (data ?? []).map((r) => r.role);
-    const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+    const user = await getCurrentUser();
+    if (!user) throw redirect({ to: "/auth" });
+    const roles = [user.role];
+    const isAdmin = user.role === "admin" || user.role === "super_admin";
     if (!isAdmin) throw redirect({ to: "/" });
-    return { roles, isSuperAdmin: roles.includes("super_admin") };
+    return { roles, isSuperAdmin: user.role === "super_admin" };
   },
   component: AdminLayout,
 });

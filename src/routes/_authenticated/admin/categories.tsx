@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteAdminCategory,
+  fetchAdminCategories,
+  saveAdminCategory,
+} from "@/lib/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,27 +27,29 @@ function AdminCategories() {
 
   const { data: cats = [] } = useQuery({
     queryKey: ["admin-cats"],
-    queryFn: async () => (await supabase.from("categories").select("*").order("sort_order")).data ?? [],
+    queryFn: () => fetchAdminCategories(),
   });
 
   async function save() {
     if (!editing) return;
-    const { id, ...rest } = editing;
-    const { error } = id
-      ? await supabase.from("categories").update(rest).eq("id", id)
-      : await supabase.from("categories").insert(rest);
-    if (error) toast.error(error.message);
-    else {
+    try {
+      await saveAdminCategory({ data: editing });
       toast.success("Saved");
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["admin-cats"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save category");
     }
   }
 
   async function del(id: string) {
     if (!confirm("Delete?")) return;
-    await supabase.from("categories").delete().eq("id", id);
-    qc.invalidateQueries({ queryKey: ["admin-cats"] });
+    try {
+      await deleteAdminCategory({ data: { id } });
+      qc.invalidateQueries({ queryKey: ["admin-cats"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete category");
+    }
   }
 
   return (
@@ -56,7 +62,7 @@ function AdminCategories() {
         <table className="w-full text-sm">
           <thead className="bg-muted"><tr><th className="text-left p-3">Name</th><th className="text-left p-3">Slug</th><th className="p-3 text-right">Order</th><th /></tr></thead>
           <tbody>
-            {cats.map((c: any) => (
+            {cats.map((c) => (
               <tr key={c.id} className="border-t border-border">
                 <td className="p-3">{c.name}</td>
                 <td className="p-3 font-mono text-xs">{c.slug}</td>

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAccount, saveAccount } from "@/lib/account";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,11 @@ function AccountPage() {
 
   useEffect(() => {
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (!u.user) return;
-      const { data } = await supabase.from("profiles").select("*").eq("id", u.user.id).maybeSingle();
+      const data = await fetchAccount();
       setProfile({
-        full_name: data?.full_name ?? "",
-        phone: data?.phone ?? "",
-        email: data?.email ?? u.user.email ?? "",
+        full_name: data.full_name ?? "",
+        phone: data.phone ?? "",
+        email: data.email,
       });
       setLoading(false);
     })();
@@ -34,15 +32,19 @@ function AccountPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return;
-    const { error } = await supabase
-      .from("profiles")
-      .update({ full_name: profile.full_name, phone: profile.phone })
-      .eq("id", u.user.id);
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Saved");
+    try {
+      await saveAccount({
+        data: {
+          fullName: profile.full_name,
+          phone: profile.phone,
+        },
+      });
+      toast.success("Saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save account");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

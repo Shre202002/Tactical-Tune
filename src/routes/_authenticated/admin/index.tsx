@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchAdminDashboard } from "@/lib/admin";
 import { Package, ShoppingBag, AlertCircle, CheckCircle2, Clock, ShoppingCart } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
@@ -10,38 +10,7 @@ export const Route = createFileRoute("/_authenticated/admin/")({
 function AdminDashboard() {
   const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
-    queryFn: async () => {
-      const [products, orders, abandonedCarts] = await Promise.all([
-        supabase.from("products").select("id", { count: "exact", head: true }),
-        supabase.from("orders").select("status,total"),
-        supabase.from("carts").select("id,user_id,updated_at").eq("status", "active"),
-      ]);
-
-      const ordersData = orders.data ?? [];
-      const byStatus: Record<string, { count: number; total: number }> = {};
-      for (const o of ordersData) {
-        const s = (o as any).status;
-        byStatus[s] = byStatus[s] || { count: 0, total: 0 };
-        byStatus[s].count++;
-        byStatus[s].total += Number((o as any).total ?? 0);
-      }
-
-      // Carts > 1 hour old with no order = "abandoned-ish"
-      const cutoff = Date.now() - 60 * 60 * 1000;
-      const abandoned = (abandonedCarts.data ?? []).filter(
-        (c) => new Date((c as any).updated_at).getTime() < cutoff,
-      );
-
-      return {
-        productCount: products.count ?? 0,
-        byStatus,
-        abandonedCount: abandoned.length,
-        activeCartCount: abandonedCarts.data?.length ?? 0,
-        totalRevenue: Object.entries(byStatus)
-          .filter(([s]) => s === "paid" || s === "fulfilled")
-          .reduce((sum, [, v]) => sum + v.total, 0),
-      };
-    },
+    queryFn: () => fetchAdminDashboard(),
   });
 
   if (!stats) return <p>Loading dashboard...</p>;

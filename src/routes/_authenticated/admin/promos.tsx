@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  deleteAdminPromo,
+  fetchAdminPromos,
+  saveAdminPromo,
+} from "@/lib/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,23 +31,29 @@ function AdminPromos() {
   const [editing, setEditing] = useState<PromoForm | null>(null);
   const { data: promos = [] } = useQuery({
     queryKey: ["admin-promos"],
-    queryFn: async () => (await supabase.from("promos").select("*").order("created_at", { ascending: false })).data ?? [],
+    queryFn: () => fetchAdminPromos(),
   });
 
   async function save() {
     if (!editing) return;
-    const { id, ...rest } = editing;
-    const { error } = id
-      ? await supabase.from("promos").update(rest).eq("id", id)
-      : await supabase.from("promos").insert(rest);
-    if (error) toast.error(error.message);
-    else { toast.success("Saved"); setOpen(false); qc.invalidateQueries({ queryKey: ["admin-promos"] }); }
+    try {
+      await saveAdminPromo({ data: editing });
+      toast.success("Saved");
+      setOpen(false);
+      qc.invalidateQueries({ queryKey: ["admin-promos"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save promo");
+    }
   }
 
   async function del(id: string) {
     if (!confirm("Delete?")) return;
-    await supabase.from("promos").delete().eq("id", id);
-    qc.invalidateQueries({ queryKey: ["admin-promos"] });
+    try {
+      await deleteAdminPromo({ data: { id } });
+      qc.invalidateQueries({ queryKey: ["admin-promos"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete promo");
+    }
   }
 
   return (
@@ -56,7 +66,7 @@ function AdminPromos() {
         <table className="w-full text-sm">
           <thead className="bg-muted"><tr><th className="text-left p-3">Code</th><th className="text-left p-3">Discount</th><th className="p-3">Uses</th><th className="p-3">Active</th><th /></tr></thead>
           <tbody>
-            {promos.map((p: any) => (
+            {promos.map((p) => (
               <tr key={p.id} className="border-t border-border">
                 <td className="p-3 font-mono">{p.code}</td>
                 <td className="p-3">{p.percent_off ? `${p.percent_off}%` : `₹${p.flat_off}`}</td>

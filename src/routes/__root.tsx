@@ -10,7 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -38,7 +38,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    console.error(error);
   }, [error]);
 
   return (
@@ -77,23 +77,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "TacticalTune Forge is a full-stack e-commerce platform for premium tactical sports gear." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "TacticalTune Forge is a full-stack e-commerce platform for premium tactical sports gear." },
+      { title: "TacticalTune — Precision Tactical Sports Gear" },
+      { name: "description", content: "Premium tactical sports gear, air rifles, pistols, ammunition and accessories." },
+      { name: "author", content: "TacticalTune" },
+      { property: "og:title", content: "TacticalTune — Precision. Power. Tactical." },
+      { property: "og:description", content: "Premium tactical sports gear, made for precision shooters." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "TacticalTune Forge is a full-stack e-commerce platform for premium tactical sports gear." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/tOghMkBCgoWrqGKFZMuMiw1hFFH2/social-images/social-1782355025856-WhatsApp_Image_2026-06-21_at_9.43.10_PM.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/tOghMkBCgoWrqGKFZMuMiw1hFFH2/social-images/social-1782355025856-WhatsApp_Image_2026-06-21_at_9.43.10_PM.webp" },
+      { name: "twitter:title", content: "TacticalTune" },
+      { name: "twitter:description", content: "Premium tactical sports gear, made for precision shooters." },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: "/favicon.svg",
       },
     ],
   }),
@@ -124,6 +126,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
 }

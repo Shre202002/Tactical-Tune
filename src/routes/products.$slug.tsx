@@ -8,15 +8,15 @@ import { AnnouncementBar } from "@/components/site/AnnouncementBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Zap, Shield, Truck, Crosshair } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { addToCart } from "@/lib/cart";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 
 const productOptions = (slug: string) =>
   queryOptions({
     queryKey: ["product", slug],
     queryFn: async () => {
-      const p = await fetchProductBySlug(slug);
+      const p = await fetchProductBySlug({ data: { slug } });
       if (!p) throw notFound();
       return p;
     },
@@ -66,12 +66,12 @@ function ProductPage() {
   async function handleAdd() {
     setAdding(true);
     try {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
+      const user = await getCurrentUser();
+      if (!user) {
         window.location.href = "/auth";
         return;
       }
-      await addToCart(data.user.id, p.id, p.price, qty);
+      await addToCart({ data: { productId: p.id, quantity: qty } });
       toast.success(`Added ${qty} × ${p.name} to cart`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");

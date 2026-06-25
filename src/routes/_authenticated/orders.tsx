@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchMyOrders } from "@/lib/orders";
 import { Navbar } from "@/components/site/Navbar";
 import { Footer } from "@/components/site/Footer";
 import { Badge } from "@/components/ui/badge";
@@ -12,13 +12,7 @@ export const Route = createFileRoute("/_authenticated/orders")({
 function OrdersPage() {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["my-orders"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("orders")
-        .select("id,order_number,status,total,created_at,order_items(product_name,quantity,line_total)")
-        .order("created_at", { ascending: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchMyOrders(),
   });
 
   return (
@@ -35,7 +29,7 @@ function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {orders.map((o: any) => (
+            {orders.map((o) => (
               <div key={o.id} className="bg-card border border-border rounded p-5">
                 <div className="flex justify-between items-start mb-3">
                   <div>
@@ -47,7 +41,7 @@ function OrdersPage() {
                   </Badge>
                 </div>
                 <div className="text-sm text-muted-foreground mb-2">
-                  {o.order_items?.map((it: any, i: number) => (
+                  {o.order_items.map((it, i) => (
                     <span key={i}>{it.product_name} × {it.quantity}{i < o.order_items.length - 1 ? ", " : ""}</span>
                   ))}
                 </div>
