@@ -1,48 +1,30 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+"use server";
 
-export type { CartItemRow } from "./domain";
 
-export const fetchCartItems = createServerFn({ method: "GET" }).handler(async () => {
+export async function fetchCartItems() {
   const { getCartItems } = await import("@/server/store.server");
   return getCartItems();
-});
+}
 
-export const addToCart = createServerFn({ method: "POST" })
-  .validator(
-    z.object({
-      productId: z.string().min(1),
-      quantity: z.number().int().min(1).max(20),
-    }),
-  )
-  .handler(async ({ data }) => {
-    const { addProductToCart } = await import("@/server/store.server");
-    await addProductToCart(data);
-    return { success: true };
-  });
+export async function addToCart(input: { productId: string; quantity: number }) {
+  const { addProductToCart } = await import("@/server/store.server");
+  await addProductToCart(input);
+  return { success: true };
+}
 
-export const updateCartItem = createServerFn({ method: "POST" })
-  .validator(
-    z.object({
-      itemId: z.string().min(1),
-      quantity: z.number().int(),
-    }),
-  )
-  .handler(async ({ data }) => {
-    const { changeCartItemQuantity } = await import("@/server/store.server");
-    await changeCartItemQuantity(data);
-    return { success: true };
-  });
+export async function updateCartItem(input: { itemId: string; quantity: number }) {
+  const { changeCartItemQuantity } = await import("@/server/store.server");
+  await changeCartItemQuantity(input);
+  return { success: true };
+}
 
-export const removeCartItem = createServerFn({ method: "POST" })
-  .validator(z.object({ itemId: z.string().min(1) }))
-  .handler(async ({ data }) => {
-    const { removeCartItemById } = await import("@/server/store.server");
-    await removeCartItemById(data.itemId);
-    return { success: true };
-  });
+export async function removeCartItem(itemId: string) {
+  const { removeCartItemById } = await import("@/server/store.server");
+  await removeCartItemById(itemId);
+  return { success: true };
+}
 
-export const checkoutCart = createServerFn({ method: "POST" }).handler(async () => {
+export async function checkoutCart() {
   const { checkoutActiveCart } = await import("@/server/store.server");
   return checkoutActiveCart();
-});
+}

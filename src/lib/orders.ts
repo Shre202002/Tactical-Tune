@@ -1,6 +1,6 @@
-import { createServerFn } from "@tanstack/react-start";
+"use server";
 
-export const fetchMyOrders = createServerFn({ method: "GET" }).handler(async () => {
+export async function fetchMyOrders() {
   const { listCurrentUserOrders } = await import("@/server/store.server");
   return listCurrentUserOrders();
-});
+}

@@ -8,7 +8,7 @@ import type {
   OrderRow,
   OrderStatus,
 } from "@/lib/domain";
-import { requireUser } from "./auth.server";
+import { requireCompleteProfile, requireUser } from "./auth.server";
 import { getCollection, getMongoClient } from "./database.server";
 import {
   type ProductDocument,
@@ -245,8 +245,20 @@ function createOrderNumber() {
 }
 
 export async function checkoutActiveCart() {
-  const user = await requireUser();
+  const user = await requireCompleteProfile();
   const userId = new ObjectId(user.id);
+  const profileAddress = {
+    firstName: user.firstName,
+    lastName: user.lastName,
+    fullName: user.full_name,
+    email: user.email,
+    phone: user.phone,
+    address: user.address,
+    landmark: user.landmark,
+    city: user.city,
+    state: user.state,
+    pincode: user.pincode,
+  };
   const client = await getMongoClient();
   const session = client.startSession();
   let createdOrderId = "";
@@ -329,8 +341,8 @@ export async function checkoutActiveCart() {
         total: subtotal,
         currency: "INR",
         promo_code: null,
-        shipping_address: null,
-        billing_address: null,
+        shipping_address: profileAddress,
+        billing_address: profileAddress,
         payment_initiated_at: now,
         payment_completed_at: null,
         notes: null,

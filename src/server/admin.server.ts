@@ -1,20 +1,32 @@
-import { Readable } from "node:stream";
 import { GridFSBucket, ObjectId } from "mongodb";
 
 import type {
   AppRole,
   OrderStatus,
+  ProductFaq,
+  ProductImage,
   PromoRow,
   ProductRow,
+  ProductSeo,
+  ProductShipping,
+  ProductSpec,
 } from "@/lib/domain";
 import {
+  getAdminPermissions,
+  getRoleLabel,
+  getRoleRestrictions,
+  STAFF_ROLES,
+} from "@/lib/rbac";
+import {
   requireAdmin,
-  requireSuperAdmin,
+  requireStaff,
   type UserDocument,
 } from "./auth.server";
 import {
   listAllProducts,
   listCategories,
+  defaultProductAnalytics,
+  defaultProductShipping,
   serializeCategory,
   serializeProduct,
   type CategoryDocument,
@@ -44,7 +56,17 @@ export type ProductAdminInput = {
   is_featured: boolean;
   is_active: boolean;
   licence_required: boolean;
-  image_url: string;
+  images: ProductImage[];
+  sku?: string;
+  tags?: string[];
+  specifications?: ProductSpec[];
+  faqs?: ProductFaq[];
+  seo?: ProductSeo;
+  shipping?: ProductShipping;
+  track_inventory?: boolean;
+  requiresHandling?: boolean;
+  requiresPremiumProtection?: boolean;
+  visibility_priority?: number;
 };
 
 export type CategoryAdminInput = {
@@ -72,6 +94,18 @@ type PromoDocument = Omit<PromoRow, "id" | "created_at" | "updated_at"> & {
   updated_at: Date;
 };
 
+type AuditLogDocument = {
+  _id: ObjectId;
+  actor_id: ObjectId;
+  actor_email: string;
+  actor_role: AppRole;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+};
+
 function serializePromo(promo: PromoDocument): PromoRow {
   return {
     id: promo._id.toHexString(),
@@ -90,50 +124,202 @@ function serializePromo(promo: PromoDocument): PromoRow {
   };
 }
 
+function getUserFullName(user: Pick<UserDocument, "firstName" | "lastName" | "full_name">) {
+  return (
+    user.full_name ||
+    [user.firstName, user.lastName]
+      .map((part) => (typeof part === "string" ? part.trim() : ""))
+      .filter(Boolean)
+      .join(" ") ||
+    null
+  );
+}
+
+function getUserCreatedAt(user: Pick<UserDocument, "createdAt" | "created_at">) {
+  return user.created_at ?? user.createdAt ?? new Date(0);
+}
+
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "product";
+}
+
+function sanitizeImageKitFolderSegment(value: string) {
+  return (
+    value
+      .trim()
+      .replace(/&/g, "and")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 90) || "folder"
+  );
+}
+
+function sanitizeImageKitFolderPath(value: string) {
+  const segments = value
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map(sanitizeImageKitFolderSegment);
+  return `/${segments.join("/")}`;
+}
+
+function imageKitConfig() {
+  const privateKey =
+    process.env.IMAGEKIT_PRIVATE_KEY ||
+    process.env.Imagekit_PRIVATE_KEY ||
+    process.env.IMAGEKIT_PRIVATE ||
+    "";
+  const urlEndpoint =
+    process.env.IMAGEKIT_URL_ENDPOINT ||
+    process.env["Imagekit_URL-endpoint"] ||
+    process.env.IMAGEKIT_URL ||
+    "";
+
+  if (!privateKey) throw new Error("ImageKit private key is missing.");
+  return { privateKey, urlEndpoint };
+}
+
+function imageKitFolder(productName: string, productSlug?: string) {
+  const rootFolder = sanitizeImageKitFolderPath(
+    process.env.IMAGEKIT_PRODUCT_FOLDER || "/Tactical-Tune/Products",
+  );
+  return `${rootFolder}/${slugify(productSlug || productName)}`;
+}
+
+function imageKitFileName(productName: string, imageIndex: number) {
+  return `tacticaltune_best_Guns_${slugify(productName)}_${Math.max(1, imageIndex)}.webp`;
+}
+
+function normalizeProductImageInput(images: ProductImage[], productName: string) {
+  return images.map((image, index) => ({
+    ...image,
+    alt: image.alt || productName,
+    is_primary: index === 0,
+    order: index,
+    fileId: image.fileId ?? null,
+    name: image.name ?? null,
+    filePath: image.filePath ?? null,
+    thumbnailUrl: image.thumbnailUrl ?? null,
+  }));
+}
+
+function maskEmail(email: string) {
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return "hidden";
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function maskPhone(phone: string | null | undefined) {
+  if (!phone) return null;
+  return phone.length <= 4 ? "****" : `******${phone.slice(-4)}`;
+}
+
+async function recordAdminAudit(
+  actor: { id: string; email: string; role: AppRole },
+  action: string,
+  targetType: string,
+  targetId: string | null,
+  metadata: Record<string, unknown> = {},
+) {
+  const logs = await getCollection<AuditLogDocument>("auditLogs");
+  await logs.insertOne({
+    _id: new ObjectId(),
+    actor_id: new ObjectId(actor.id),
+    actor_email: actor.email,
+    actor_role: actor.role,
+    action,
+    target_type: targetType,
+    target_id: targetId,
+    metadata,
+    created_at: new Date(),
+  });
+}
+
 export async function getAdminProducts() {
-  await requireAdmin();
+  await requireStaff();
   return listAllProducts();
 }
 
 export async function getAdminCategories() {
-  await requireAdmin();
+  await requireStaff();
   return listCategories({ includeInactive: true });
 }
 
 export async function saveProduct(input: ProductAdminInput): Promise<ProductRow> {
-  await requireAdmin();
-  const products = await getCollection<ProductDocument>("products");
+  const actor = await requireStaff();
+  const [products, categories] = await Promise.all([
+    getCollection<ProductDocument>("products"),
+    getCollection<CategoryDocument>("categories"),
+  ]);
   const now = new Date();
   const id = input.id && ObjectId.isValid(input.id) ? new ObjectId(input.id) : null;
   const existing = id ? await products.findOne({ _id: id }) : null;
+  const category = input.category_slug
+    ? await categories.findOne({ slug: input.category_slug })
+    : null;
+  const productName = input.name.trim();
+  const productSlug = input.slug.trim().toLowerCase();
+  const images = normalizeProductImageInput(
+    input.images?.length ? input.images : existing?.images ?? [],
+    productName,
+  );
+  const seo: ProductSeo = input.seo ?? {
+    meta_title: existing?.seo?.meta_title ?? existing?.seo_title ?? productName,
+    meta_description:
+      existing?.seo?.meta_description ??
+      existing?.seo_description ??
+      input.short_description.trim(),
+    meta_keywords: existing?.seo?.meta_keywords ?? input.tags ?? existing?.tags ?? [],
+  };
 
   const document: Omit<ProductDocument, "_id" | "created_at"> = {
-    name: input.name.trim(),
-    slug: input.slug.trim().toLowerCase(),
+    __v: existing?.__v ?? 0,
+    name: productName,
+    slug: productSlug,
     brand: input.brand.trim() || null,
     short_description: input.short_description.trim() || null,
     description: input.description.trim() || null,
-    sku: existing?.sku ?? null,
+    sku: input.sku?.trim() || existing?.sku || productSlug.toUpperCase().slice(0, 48),
+    currency: existing?.currency ?? "INR",
     price: Math.max(0, Number(input.price)),
     compare_at_price:
       input.compare_at_price == null ? null : Math.max(0, Number(input.compare_at_price)),
+    category_id: category?._id ?? existing?.category_id ?? null,
     category_slug: input.category_slug || null,
     sub_category: existing?.sub_category ?? null,
-    tags: existing?.tags ?? [],
-    images: input.image_url
-      ? [{ url: input.image_url, alt: input.name.trim(), order: 0 }]
-      : existing?.images ?? [],
+    tags: input.tags ?? existing?.tags ?? [],
+    images,
+    analytics: existing?.analytics ?? defaultProductAnalytics(),
+    faqs: input.faqs ?? existing?.faqs ?? [],
     stock: Math.max(0, Math.floor(input.stock)),
     low_stock_threshold: existing?.low_stock_threshold ?? 3,
+    track_inventory: input.track_inventory ?? existing?.track_inventory ?? true,
     is_active: input.is_active,
+    is_deleted: existing?.is_deleted ?? false,
     is_featured: input.is_featured,
     licence_required: input.licence_required,
+    requiresHandling: input.requiresHandling ?? existing?.requiresHandling ?? false,
+    requiresPremiumProtection:
+      input.requiresPremiumProtection ?? existing?.requiresPremiumProtection ?? false,
     power_plant: input.power_plant.trim() || null,
     caliber: input.caliber.trim() || null,
     velocity: input.velocity.trim() || null,
-    specifications: existing?.specifications ?? [],
-    seo_title: existing?.seo_title ?? null,
-    seo_description: existing?.seo_description ?? null,
+    specifications: input.specifications ?? existing?.specifications ?? [],
+    seo,
+    seo_title: seo.meta_title,
+    seo_description: seo.meta_description,
+    shipping: input.shipping ?? existing?.shipping ?? defaultProductShipping(),
+    visibility_priority: input.visibility_priority ?? existing?.visibility_priority ?? 0,
+    created_by_admin: existing?.created_by_admin ?? actor.email,
+    updated_by_admin: actor.email,
+    createdAt: existing?.createdAt ?? existing?.created_at ?? now,
+    updatedAt: now,
     updated_at: now,
   };
 
@@ -146,6 +332,11 @@ export async function saveProduct(input: ProductAdminInput): Promise<ProductRow>
       { returnDocument: "after" },
     );
     if (!result) throw new Error("Product not found.");
+    await recordAdminAudit(actor, "product.update", "product", result._id.toHexString(), {
+      name: result.name,
+      stock: result.stock,
+      is_active: result.is_active,
+    });
     return serializeProduct(result);
   }
 
@@ -155,18 +346,27 @@ export async function saveProduct(input: ProductAdminInput): Promise<ProductRow>
     created_at: now,
   };
   await products.insertOne(created);
+  await recordAdminAudit(actor, "product.create", "product", created._id.toHexString(), {
+    name: created.name,
+    stock: created.stock,
+    is_active: created.is_active,
+  });
   return serializeProduct(created);
 }
 
 export async function deleteProduct(productId: string) {
-  await requireAdmin();
+  const actor = await requireAdmin();
   if (!ObjectId.isValid(productId)) throw new Error("Invalid product.");
   const products = await getCollection<ProductDocument>("products");
+  const product = await products.findOne({ _id: new ObjectId(productId) });
   await products.deleteOne({ _id: new ObjectId(productId) });
+  await recordAdminAudit(actor, "product.delete", "product", productId, {
+    name: product?.name ?? null,
+  });
 }
 
 export async function saveCategory(input: CategoryAdminInput) {
-  await requireAdmin();
+  const actor = await requireAdmin();
   const categories = await getCollection<CategoryDocument>("categories");
   const now = new Date();
   const id = input.id && ObjectId.isValid(input.id) ? new ObjectId(input.id) : null;
@@ -186,6 +386,10 @@ export async function saveCategory(input: CategoryAdminInput) {
       { returnDocument: "after" },
     );
     if (!result) throw new Error("Category not found.");
+    await recordAdminAudit(actor, "category.update", "category", result._id.toHexString(), {
+      name: result.name,
+      slug: result.slug,
+    });
     return serializeCategory(result);
   }
 
@@ -197,14 +401,23 @@ export async function saveCategory(input: CategoryAdminInput) {
     created_at: now,
   };
   await categories.insertOne(created);
+  await recordAdminAudit(actor, "category.create", "category", created._id.toHexString(), {
+    name: created.name,
+    slug: created.slug,
+  });
   return serializeCategory(created);
 }
 
 export async function deleteCategory(categoryId: string) {
-  await requireAdmin();
+  const actor = await requireAdmin();
   if (!ObjectId.isValid(categoryId)) throw new Error("Invalid category.");
   const categories = await getCollection<CategoryDocument>("categories");
+  const category = await categories.findOne({ _id: new ObjectId(categoryId) });
   await categories.deleteOne({ _id: new ObjectId(categoryId) });
+  await recordAdminAudit(actor, "category.delete", "category", categoryId, {
+    name: category?.name ?? null,
+    slug: category?.slug ?? null,
+  });
 }
 
 export async function getAdminPromos() {
@@ -214,7 +427,7 @@ export async function getAdminPromos() {
 }
 
 export async function savePromo(input: PromoAdminInput) {
-  await requireAdmin();
+  const actor = await requireAdmin();
   const promos = await getCollection<PromoDocument>("promos");
   const now = new Date();
   const id = input.id && ObjectId.isValid(input.id) ? new ObjectId(input.id) : null;
@@ -240,6 +453,10 @@ export async function savePromo(input: PromoAdminInput) {
       { returnDocument: "after" },
     );
     if (!result) throw new Error("Promo not found.");
+    await recordAdminAudit(actor, "promo.update", "promo", result._id.toHexString(), {
+      code: result.code,
+      is_active: result.is_active,
+    });
     return serializePromo(result);
   }
 
@@ -252,18 +469,26 @@ export async function savePromo(input: PromoAdminInput) {
     created_at: now,
   };
   await promos.insertOne(created);
+  await recordAdminAudit(actor, "promo.create", "promo", created._id.toHexString(), {
+    code: created.code,
+    is_active: created.is_active,
+  });
   return serializePromo(created);
 }
 
 export async function deletePromo(promoId: string) {
-  await requireAdmin();
+  const actor = await requireAdmin();
   if (!ObjectId.isValid(promoId)) throw new Error("Invalid promo.");
   const promos = await getCollection<PromoDocument>("promos");
+  const promo = await promos.findOne({ _id: new ObjectId(promoId) });
   await promos.deleteOne({ _id: new ObjectId(promoId) });
+  await recordAdminAudit(actor, "promo.delete", "promo", promoId, {
+    code: promo?.code ?? null,
+  });
 }
 
 export async function getAdminOrders(filter: OrderStatus | "all") {
-  await requireAdmin();
+  await requireStaff();
   const orders = await getCollection<OrderDocument>("orders");
   const query = filter === "all" ? {} : { status: filter };
   const rows = await orders.find(query).sort({ created_at: -1 }).toArray();
@@ -272,8 +497,16 @@ export async function getAdminOrders(filter: OrderStatus | "all") {
   const users = await getCollection<UserDocument>("users");
   const userRows = await users
     .find({ _id: { $in: [...new Set(rows.map((row) => row.user_id.toHexString()))].map((id) => new ObjectId(id)) } })
-    .project<{ _id: ObjectId; email: string; full_name: string | null }>({
+    .project<{
+      _id: ObjectId;
+      email: string;
+      firstName?: string;
+      lastName?: string;
+      full_name?: string | null;
+    }>({
       email: 1,
+      firstName: 1,
+      lastName: 1,
       full_name: 1,
     })
     .toArray();
@@ -284,7 +517,7 @@ export async function getAdminOrders(filter: OrderStatus | "all") {
     customer: userMap.has(order.user_id.toHexString())
       ? {
           email: userMap.get(order.user_id.toHexString())?.email ?? "",
-          full_name: userMap.get(order.user_id.toHexString())?.full_name ?? null,
+          full_name: getUserFullName(userMap.get(order.user_id.toHexString())!),
         }
       : null,
   }));
@@ -294,10 +527,14 @@ export async function updateOrderStatus(input: {
   orderId: string;
   status: OrderStatus;
 }) {
-  await requireAdmin();
+  const actor = await requireStaff();
+  if (actor.role === "shop_manager" && input.status !== "fulfilled") {
+    throw new Error("Shop managers can only mark orders as fulfilled.");
+  }
   if (!ObjectId.isValid(input.orderId)) throw new Error("Invalid order.");
   const orders = await getCollection<OrderDocument>("orders");
   const now = new Date();
+  const existing = await orders.findOne({ _id: new ObjectId(input.orderId) });
   await orders.updateOne(
     { _id: new ObjectId(input.orderId) },
     {
@@ -308,19 +545,39 @@ export async function updateOrderStatus(input: {
       },
     },
   );
+  await recordAdminAudit(actor, "order.status_update", "order", input.orderId, {
+    from: existing?.status ?? null,
+    to: input.status,
+    order_number: existing?.order_number ?? null,
+  });
 }
 
 export async function getAdminDashboard() {
-  await requireAdmin();
-  const [products, orders, carts] = await Promise.all([
+  const actor = await requireStaff();
+  const permissions = getAdminPermissions(actor.role);
+  const [products, orders, carts, users, promos] = await Promise.all([
     getCollection<ProductDocument>("products"),
     getCollection<OrderDocument>("orders"),
     getCollection<CartDocument>("carts"),
+    getCollection<UserDocument>("users"),
+    getCollection<PromoDocument>("promos"),
   ]);
-  const [productCount, orderRows, activeCarts] = await Promise.all([
+  const [
+    productCount,
+    lowStockCount,
+    orderRows,
+    activeCarts,
+    customerCount,
+    staffCount,
+    promoCount,
+  ] = await Promise.all([
     products.countDocuments(),
+    products.countDocuments({ stock: { $lte: 3 } }),
     orders.find({}).project<{ status: OrderStatus; total: number }>({ status: 1, total: 1 }).toArray(),
     carts.find({ status: "active" }).toArray(),
+    users.countDocuments({ role: "customer" }),
+    users.countDocuments({ role: { $in: [...STAFF_ROLES] } }),
+    promos.countDocuments(),
   ]);
 
   const byStatus: Record<string, { count: number; total: number }> = {};
@@ -333,20 +590,47 @@ export async function getAdminDashboard() {
   const abandonedCount = activeCarts.filter(
     (cart) => cart.items.length > 0 && cart.updated_at.getTime() < cutoff,
   ).length;
+  const recentAuditLogs = permissions.canViewAuditLogs
+    ? (
+        await (await getCollection<AuditLogDocument>("auditLogs"))
+          .find({})
+          .sort({ created_at: -1 })
+          .limit(5)
+          .toArray()
+      ).map((log) => ({
+        id: log._id.toHexString(),
+        actor_email: log.actor_email,
+        actor_role: log.actor_role,
+        action: log.action,
+        target_type: log.target_type,
+        target_id: log.target_id,
+        created_at: log.created_at.toISOString(),
+      }))
+    : [];
 
   return {
+    role: actor.role,
+    roleLabel: getRoleLabel(actor.role),
+    permissions,
+    restrictions: getRoleRestrictions(actor.role),
     productCount,
+    lowStockCount,
+    orderCount: orderRows.length,
+    customerCount,
+    staffCount,
+    promoCount,
     byStatus,
     abandonedCount,
     activeCartCount: activeCarts.length,
     totalRevenue: Object.entries(byStatus)
       .filter(([status]) => status === "paid" || status === "fulfilled")
       .reduce((sum, [, value]) => sum + value.total, 0),
+    recentAuditLogs,
   };
 }
 
 export async function getCustomers() {
-  await requireSuperAdmin();
+  const actor = await requireStaff();
   const [users, orders, carts] = await Promise.all([
     getCollection<UserDocument>("users"),
     getCollection<OrderDocument>("orders"),
@@ -390,11 +674,11 @@ export async function getCustomers() {
 
   return userRows.map((user) => ({
     id: user._id.toHexString(),
-    email: user.email,
-    full_name: user.full_name,
-    phone: user.phone,
+    email: actor.role === "shop_manager" ? maskEmail(user.email) : user.email,
+    full_name: getUserFullName(user),
+    phone: actor.role === "shop_manager" ? maskPhone(user.phone) : user.phone,
     role: user.role as AppRole,
-    created_at: user.created_at.toISOString(),
+    created_at: getUserCreatedAt(user).toISOString(),
     orders: ordersByUser.get(user._id.toHexString()) ?? {
       total: 0,
       completed: 0,
@@ -409,23 +693,67 @@ export async function uploadImage(input: {
   filename: string;
   mimeType: string;
   base64: string;
+  productName: string;
+  productSlug?: string;
+  imageIndex: number;
 }) {
-  await requireAdmin();
-  if (!input.mimeType.startsWith("image/")) throw new Error("Only image files are allowed.");
+  const actor = await requireStaff();
+  if (input.mimeType !== "image/webp") {
+    throw new Error("Product images must be converted to WebP before upload.");
+  }
   const buffer = Buffer.from(input.base64, "base64");
-  if (buffer.length === 0 || buffer.length > 5 * 1024 * 1024) {
-    throw new Error("Image must be smaller than 5 MB.");
+  if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) {
+    throw new Error("Image must be smaller than 10 MB.");
   }
 
-  const database = await getDatabase();
-  const bucket = new GridFSBucket(database, { bucketName: "product_images" });
-  const upload = bucket.openUploadStream(input.filename, {
-    metadata: { content_type: input.mimeType, uploaded_at: new Date() },
+  const { privateKey } = imageKitConfig();
+  const folder = imageKitFolder(input.productName, input.productSlug);
+  const fileName = imageKitFileName(input.productName, input.imageIndex);
+  const form = new FormData();
+  form.set("file", new Blob([buffer], { type: "image/webp" }), fileName);
+  form.set("fileName", fileName);
+  form.set("folder", folder);
+  form.set("useUniqueFileName", "false");
+  form.set("overwriteFile", "true");
+
+  const response = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${privateKey}:`).toString("base64")}`,
+    },
+    body: form,
   });
-  await new Promise<void>((resolve, reject) => {
-    Readable.from(buffer).pipe(upload).on("error", reject).on("finish", () => resolve());
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`ImageKit upload failed: ${message.slice(0, 220)}`);
+  }
+
+  const upload = (await response.json()) as {
+    fileId: string;
+    name: string;
+    url: string;
+    thumbnailUrl?: string;
+    filePath?: string;
+  };
+  const image: ProductImage = {
+    url: upload.url,
+    alt: input.productName,
+    is_primary: input.imageIndex === 1,
+    order: Math.max(0, input.imageIndex - 1),
+    fileId: upload.fileId,
+    name: upload.name,
+    filePath: upload.filePath ?? `${folder}/${fileName}`,
+    thumbnailUrl: upload.thumbnailUrl ?? null,
+  };
+
+  await recordAdminAudit(actor, "product.image_upload", "product_image", upload.fileId, {
+    filename: fileName,
+    folder,
+    bytes: buffer.length,
+    source_filename: input.filename,
   });
-  return `/api/images/${upload.id.toHexString()}`;
+  return image;
 }
 
 export async function readImage(imageId: string) {

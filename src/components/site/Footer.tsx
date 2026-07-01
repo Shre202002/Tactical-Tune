@@ -20,7 +20,11 @@ export function Footer() {
             <input
               type="email"
               placeholder="your@email.com"
-              className="flex-1 bg-surface-dark-foreground/10 border border-surface-dark-foreground/20 rounded-sm px-3 py-2 text-sm placeholder:text-surface-dark-foreground/40 focus:outline-none focus:border-primary"
+              suppressHydrationWarning
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
+              className="footer-email-input flex-1 bg-surface-dark-foreground/10 border border-surface-dark-foreground/20 rounded-sm px-3 py-2 text-sm placeholder:text-surface-dark-foreground/40 focus:outline-none focus:border-primary"
             />
             <button className="bg-primary text-primary-foreground text-display text-xs tracking-widest px-4 rounded-sm hover:bg-primary-glow transition-colors">
               ENLIST
@@ -29,17 +33,17 @@ export function Footer() {
         </div>
 
         {[
-          { title: "Shop", links: ["Rifles", "Pistols", "Ammo", "Accessories", "New Arrivals"] },
-          { title: "Support", links: ["Track Order", "Shipping", "Returns", "FAQ", "Contact"] },
-          { title: "Brand", links: ["About", "Made in India", "Reviews", "Blog", "Careers"] },
+          { title: "Store", links: [{ label: "Shop All", href: "/shop" }] },
+          { title: "Support", links: [{ label: "Contact", href: "/contact" }] },
+          { title: "Brand", links: [{ label: "About", href: "/about" }] },
         ].map((col) => (
           <div key={col.title}>
             <h4 className="text-display text-sm tracking-widest text-primary mb-4">{col.title}</h4>
             <ul className="space-y-2">
               {col.links.map((l) => (
-                <li key={l}>
-                  <a href="#" className="text-sm text-surface-dark-foreground/70 hover:text-primary transition-colors">
-                    {l}
+                <li key={l.label}>
+                  <a href={l.href} className="text-sm text-surface-dark-foreground/70 hover:text-primary transition-colors">
+                    {l.label}
                   </a>
                 </li>
               ))}

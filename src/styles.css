@@ -1,5 +1,4 @@
-@import "tailwindcss" source(none);
-@source "../src";
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @import "@fontsource/barlow-condensed/400.css";
@@ -181,4 +180,11 @@
 }
 .animate-marquee {
   animation: marquee 30s linear infinite;
+}
+
+.footer-email-input {
+  background-image: none !important;
+  background-repeat: no-repeat !important;
+  background-size: 0 !important;
+  background-position: initial !important;
 }

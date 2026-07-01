@@ -1,42 +1,34 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+"use server";
 
-export type {
-  CategoryRow,
-  ProductImage,
-  ProductRow,
-  ProductSpec,
-} from "./domain";
 
-export const fetchCategories = createServerFn({ method: "GET" }).handler(async () => {
+export async function fetchCategories() {
   const { listCategories } = await import("@/server/catalog.server");
   return listCategories();
-});
+}
 
-export const fetchFeaturedProducts = createServerFn({ method: "GET" })
-  .validator(z.object({ limit: z.number().int().min(1).max(24).default(8) }))
-  .handler(async ({ data }) => {
-    const { listFeaturedProducts } = await import("@/server/catalog.server");
-    return listFeaturedProducts(data.limit);
-  });
+export async function fetchFeaturedProducts(limit: number = 8) {
+  const { listFeaturedProducts } = await import("@/server/catalog.server");
+  return listFeaturedProducts(Math.min(Math.max(limit, 1), 24));
+}
 
-export const fetchProductBySlug = createServerFn({ method: "GET" })
-  .validator(z.object({ slug: z.string().min(1).max(180) }))
-  .handler(async ({ data }) => {
-    const { findProductBySlug } = await import("@/server/catalog.server");
-    return findProductBySlug(data.slug);
-  });
+export async function fetchProductBySlug(slug: string) {
+  const { findProductBySlug } = await import("@/server/catalog.server");
+  return findProductBySlug(slug);
+}
 
-export const fetchAllProducts = createServerFn({ method: "GET" }).handler(async () => {
-  const { requireAdmin } = await import("@/server/auth.server");
+export async function fetchAllProducts() {
+  const { requireStaff } = await import("@/server/auth.server");
   const { listAllProducts } = await import("@/server/catalog.server");
-  await requireAdmin();
+  await requireStaff();
   return listAllProducts();
-});
+}
 
-export const fetchProductCountByCategory = createServerFn({ method: "GET" }).handler(
-  async () => {
-    const { productCountsByCategory } = await import("@/server/catalog.server");
-    return productCountsByCategory();
-  },
-);
+export async function fetchActiveProducts(categorySlug?: string) {
+  const { listActiveProducts } = await import("@/server/catalog.server");
+  return listActiveProducts(categorySlug);
+}
+
+export async function fetchProductCountByCategory() {
+  const { productCountsByCategory } = await import("@/server/catalog.server");
+  return productCountsByCategory();
+}

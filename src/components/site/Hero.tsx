@@ -1,3 +1,5 @@
+"use client";
+
 import heroImg from "@/assets/hero-airgun.jpg";
 import { ArrowRight, Crosshair } from "lucide-react";
 
@@ -42,23 +44,23 @@ export function Hero() {
           </h1>
 
           <p className="text-base md:text-lg text-surface-dark-foreground/70 max-w-md mb-8">
-            India's premium tactical sports gear. Built for shooters who refuse to compromise.
+            India&apos;s premium tactical sports gear. Built for shooters who refuse to compromise.
             No licence needed. Made in India.
           </p>
 
           <div className="flex flex-wrap gap-3">
             <a
-              href="#shop"
+              href="/shop"
               className="btn-tactical-glow group inline-flex items-center gap-2 bg-primary text-primary-foreground text-display px-7 py-3.5 rounded-sm tracking-widest text-sm"
             >
               SHOP NOW
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </a>
             <a
-              href="#catalog"
+              href="/contact"
               className="inline-flex items-center gap-2 border border-surface-dark-foreground/30 text-surface-dark-foreground text-display px-7 py-3.5 rounded-sm tracking-widest text-sm hover:border-accent hover:text-accent transition-colors"
             >
-              VIEW CATALOG
+              CONTACT US
             </a>
           </div>
 
@@ -79,7 +81,7 @@ export function Hero() {
         <div className="relative">
           <div className="absolute inset-0 -m-8 rounded-full bg-gradient-to-br from-primary/20 via-transparent to-accent/20 blur-2xl" />
           <img
-            src={heroImg}
+            src={heroImg.src}
             alt="TacticalTune precision airgun rifle with scope"
             width={1536}
             height={1024}

@@ -1,7 +1,10 @@
+"use client";
+
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
 import { Star, ShoppingCart } from "lucide-react";
-import { fetchFeaturedProducts, type ProductRow } from "@/lib/catalog";
+import { fetchFeaturedProducts } from "@/lib/catalog";
+import type { ProductRow } from "@/lib/domain";
 import fallbackImg from "@/assets/cat-rifles.jpg";
 
 function formatINR(n: number) {
@@ -9,7 +12,7 @@ function formatINR(n: number) {
 }
 
 function ProductCard({ p }: { p: ProductRow }) {
-  const img = p.images?.[0]?.url || fallbackImg;
+  const img = p.images?.[0]?.url || fallbackImg.src;
   const discount =
     p.compare_at_price && p.compare_at_price > p.price
       ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100)
@@ -18,7 +21,7 @@ function ProductCard({ p }: { p: ProductRow }) {
   const reviewCount = (Number.parseInt(p.id.slice(-4), 16) % 200) + 40;
 
   return (
-    <Link to="/products/$slug" params={{ slug: p.slug }} className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
+    <Link href={`/products/${p.slug}`} className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
       <div className="relative aspect-square bg-muted overflow-hidden">
         <img
           src={img}
@@ -26,7 +29,7 @@ function ProductCard({ p }: { p: ProductRow }) {
           width={800}
           height={800}
           loading="lazy"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackImg; }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackImg.src; }}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         <div className="absolute top-3 left-3 flex flex-col gap-1">
@@ -91,8 +94,13 @@ function SkeletonCard() {
 export function BestSellers() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["featured-products"],
-    queryFn: () => fetchFeaturedProducts({ data: { limit: 8 } }),
+    queryFn: () => fetchFeaturedProducts(8),
   });
+  const products = data ?? [];
+
+  if (!isLoading && !error && products.length === 0) {
+    return null;
+  }
 
   return (
     <section className="py-16 md:py-24 bg-card border-y border-border">
@@ -112,7 +120,7 @@ export function BestSellers() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {isLoading
             ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
-            : data?.map((p) => <ProductCard key={p.id} p={p} />)}
+            : products.map((p) => <ProductCard key={p.id} p={p} />)}
         </div>
       </div>
     </section>
