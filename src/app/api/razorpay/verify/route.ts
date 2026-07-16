@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       { razorpay_order_id, user_id: new ObjectId(user.id) },
       {
         $set: {
-          status: "processing",
+          status: "paid",
           payment_completed_at: new Date(),
           razorpay_payment_id,
           razorpay_signature,

@@ -175,10 +175,10 @@ export default function OrderDetailsPage({
             <div className="text-sm leading-relaxed text-muted-foreground">
               {order.shipping_address ? (
                 <>
-                  <p className="font-medium text-foreground mb-1">{order.shipping_address.name}</p>
-                  <p>{order.shipping_address.street}</p>
-                  <p>{order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.zip_code}</p>
-                  <p className="mt-2">📞 {order.shipping_address.phone}</p>
+                  <p className="font-medium text-foreground mb-1">{String(order.shipping_address.name ?? "")}</p>
+                  <p>{String(order.shipping_address.street ?? "")}</p>
+                  <p>{String(order.shipping_address.city ?? "")}, {String(order.shipping_address.state ?? "")} {String(order.shipping_address.zip_code ?? "")}</p>
+                  <p className="mt-2">📞 {String(order.shipping_address.phone ?? "")}</p>
                 </>
               ) : (
                 <p>No shipping address provided.</p>
