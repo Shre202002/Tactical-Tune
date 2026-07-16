@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Search, ShoppingCart, User, Menu, LogOut, LayoutDashboard, Package } from "lucide-react";
 import { useAuth } from "@/lib/auth-client";
 import { signOut } from "@/lib/auth";
+import { fetchCartItems } from "@/lib/cart";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -31,6 +33,14 @@ const primaryLinks = [
 export function Navbar() {
   const { user, isAdmin } = useAuth();
   const pathname = usePathname();
+
+  const { data: cartItems = [] } = useQuery({
+    queryKey: ["cart"],
+    queryFn: fetchCartItems,
+    enabled: !!user,
+  });
+
+  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
@@ -103,6 +113,11 @@ export function Navbar() {
 
           <Link href="/cart" aria-label="Cart" className="p-2 hover:text-primary transition-colors relative">
             <ShoppingCart className="w-5 h-5" />
+            {cartCount > 0 && (
+              <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
           </Link>
           <Sheet>
             <SheetTrigger asChild>

@@ -27,9 +27,10 @@ export default function OrdersPage() {
         ) : (
           <div className="space-y-4">
             {orders.map((o) => (
-              <div
+              <Link
+                href={`/orders/${o.id}`}
                 key={o.id}
-                className="bg-card border border-border rounded p-5"
+                className="block bg-card border border-border rounded p-5 hover:border-primary/50 hover:shadow-card transition-all"
               >
                 <div className="flex justify-between items-start mb-3">
                   <div>
@@ -56,10 +57,11 @@ export default function OrdersPage() {
                     </span>
                   ))}
                 </div>
-                <div className="text-right font-bold">
-                  ₹{Number(o.total).toLocaleString("en-IN")}
+                <div className="text-right font-bold flex items-center justify-between">
+                  <span className="text-primary text-sm font-medium hover:underline">View Details →</span>
+                  <span>₹{Number(o.total).toLocaleString("en-IN")}</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

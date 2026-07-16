@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ObjectId } from "mongodb";
+import Razorpay from "razorpay";
 
 import type {
   CartItemRow,
@@ -53,6 +54,9 @@ export type OrderDocument = {
   payment_completed_at: Date | null;
   notes: string | null;
   order_items: OrderItemDocument[];
+  razorpay_order_id: string | null;
+  razorpay_payment_id: string | null;
+  razorpay_signature: string | null;
   created_at: Date;
   updated_at: Date;
 };
@@ -106,6 +110,40 @@ async function getOrCreateCart(userId: ObjectId) {
     if (raced) return raced;
     throw error;
   }
+}
+
+
+
+export async function getCurrentUserOrder(orderId: string) {
+  const user = await requireUser();
+  const orders = await getCollection<OrderDocument>("orders");
+  const order = await orders.findOne({ 
+    _id: new ObjectId(orderId), 
+    user_id: new ObjectId(user.id) 
+  });
+  
+  if (!order) return null;
+
+  return {
+    id: order._id.toString(),
+    user_id: order.user_id.toString(),
+    order_number: order.order_number,
+    status: order.status,
+    total: order.total,
+    currency: order.currency,
+    billing_address: order.billing_address,
+    shipping_address: order.shipping_address,
+    created_at: order.created_at,
+    updated_at: order.updated_at,
+    razorpay_order_id: order.razorpay_order_id,
+    order_items: (order.order_items || []).map((it: any) => ({
+      product_id: it.product_id?.toString() || "",
+      product_name: it.product_name,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      total_price: it.total_price
+    }))
+  };
 }
 
 export async function getCartItems(): Promise<CartItemRow[]> {
@@ -329,9 +367,25 @@ export async function checkoutActiveCart() {
       }
 
       const now = new Date();
+      const orderNumber = createOrderNumber();
+
+      let rzpOrderId = null;
+      if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+        const rzp = new Razorpay({
+          key_id: process.env.RAZORPAY_KEY_ID,
+          key_secret: process.env.RAZORPAY_KEY_SECRET,
+        });
+        const rzpOrder = await rzp.orders.create({
+          amount: Math.round(subtotal * 100),
+          currency: "INR",
+          receipt: orderNumber,
+        });
+        rzpOrderId = rzpOrder.id;
+      }
+
       const order: OrderDocument = {
         _id: new ObjectId(),
-        order_number: createOrderNumber(),
+        order_number: orderNumber,
         user_id: userId,
         status: "pending_payment",
         subtotal,
@@ -347,6 +401,9 @@ export async function checkoutActiveCart() {
         payment_completed_at: null,
         notes: null,
         order_items: orderItems,
+        razorpay_order_id: rzpOrderId,
+        razorpay_payment_id: null,
+        razorpay_signature: null,
         created_at: now,
         updated_at: now,
       };
@@ -364,7 +421,15 @@ export async function checkoutActiveCart() {
   }
 
   if (!createdOrderId) throw new Error("Could not create order.");
-  return { orderId: createdOrderId };
+  
+  const orders = await getCollection<OrderDocument>("orders");
+  const finalOrder = await orders.findOne({ _id: new ObjectId(createdOrderId) });
+  
+  return { 
+    orderId: createdOrderId, 
+    razorpayOrderId: finalOrder?.razorpay_order_id, 
+    amount: Math.round((finalOrder?.total || 0) * 100) 
+  };
 }
 
 export async function listCurrentUserOrders() {

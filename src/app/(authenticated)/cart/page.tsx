@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Script from "next/script";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +16,7 @@ import { toast } from "sonner";
 
 export default function CartPage() {
   const qc = useQueryClient();
+  const [isProcessing, setIsProcessing] = useState(false);
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["cart"],
     queryFn: () => fetchCartItems(),
@@ -48,10 +51,56 @@ export default function CartPage() {
   }
 
   async function checkout() {
+    setIsProcessing(true);
     try {
-      await checkoutCart();
-      toast.success("Order created — payment integration coming soon");
-      window.location.href = "/orders";
+      const res = await checkoutCart();
+      if (!res.razorpayOrderId) {
+        toast.success("Order created (No payment required / Gateway not configured)");
+        window.location.href = "/orders";
+        return;
+      }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
+        amount: res.amount,
+        currency: "INR",
+        name: "Tactical Hub Pro",
+        description: "Order Payment",
+        order_id: res.razorpayOrderId,
+        handler: async function (response: any) {
+          try {
+            const verifyRes = await fetch("/api/razorpay/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+            if (verifyRes.ok) {
+              toast.success("Payment successful!");
+              window.location.href = "/orders";
+            } else {
+              toast.error("Payment verification failed");
+              setIsProcessing(false);
+            }
+          } catch (err) {
+            toast.error("Failed to verify payment");
+            setIsProcessing(false);
+          }
+        },
+        theme: {
+          color: "#e22c2c",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on("payment.failed", function (response: any) {
+        toast.error("Payment Failed: " + response.error.description);
+        setIsProcessing(false);
+      });
+      rzp.open();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Checkout failed";
       toast.error(message);
@@ -60,11 +109,13 @@ export default function CartPage() {
           window.location.href = "/account?completeProfile=1";
         }, 800);
       }
+      setIsProcessing(false);
     }
   }
 
   return (
     <div className="min-h-screen bg-background">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       <div className="container-tactical py-10">
         <h1 className="text-display text-4xl mb-6">Your cart</h1>
         {isLoading ? (
@@ -102,14 +153,16 @@ export default function CartPage() {
                     <div className="flex items-center gap-2 mt-2">
                       <button
                         onClick={() => changeQty(it.id, it.quantity - 1)}
-                        className="border border-border w-7 h-7 rounded"
+                        disabled={isProcessing}
+                        className="border border-border w-7 h-7 rounded disabled:opacity-50"
                       >
                         −
                       </button>
                       <span className="w-8 text-center">{it.quantity}</span>
                       <button
                         onClick={() => changeQty(it.id, it.quantity + 1)}
-                        className="border border-border w-7 h-7 rounded"
+                        disabled={isProcessing}
+                        className="border border-border w-7 h-7 rounded disabled:opacity-50"
                       >
                         +
                       </button>
@@ -124,7 +177,8 @@ export default function CartPage() {
                     </div>
                     <button
                       onClick={() => remove(it.id)}
-                      className="text-destructive mt-2"
+                      disabled={isProcessing}
+                      className="text-destructive mt-2 disabled:opacity-50"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -147,13 +201,9 @@ export default function CartPage() {
                 <span>Total</span>
                 <span>₹{subtotal.toLocaleString("en-IN")}</span>
               </div>
-              <Button onClick={checkout} className="w-full btn-tactical-glow">
-                Checkout
+              <Button onClick={checkout} disabled={isProcessing} className="w-full btn-tactical-glow">
+                {isProcessing ? "Processing..." : "Checkout securely"}
               </Button>
-              <p className="text-[11px] text-muted-foreground mt-2">
-                Payment integration (Razorpay) coming soon — order will be
-                created with status &quot;pending_payment&quot;.
-              </p>
             </div>
           </div>
         )}

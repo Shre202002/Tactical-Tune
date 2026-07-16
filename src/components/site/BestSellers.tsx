@@ -7,76 +7,7 @@ import { fetchFeaturedProducts } from "@/lib/catalog";
 import type { ProductRow } from "@/lib/domain";
 import fallbackImg from "@/assets/cat-rifles.jpg";
 
-function formatINR(n: number) {
-  return `₹${Math.round(n).toLocaleString("en-IN")}`;
-}
-
-function ProductCard({ p }: { p: ProductRow }) {
-  const img = p.images?.[0]?.url || fallbackImg.src;
-  const discount =
-    p.compare_at_price && p.compare_at_price > p.price
-      ? Math.round(((p.compare_at_price - p.price) / p.compare_at_price) * 100)
-      : null;
-  const lowStock = p.stock > 0 && p.stock <= 5;
-  const reviewCount = (Number.parseInt(p.id.slice(-4), 16) % 200) + 40;
-
-  return (
-    <Link href={`/products/${p.slug}`} className="group bg-background border border-border rounded-sm overflow-hidden hover:shadow-card transition-all hover:-translate-y-1 flex flex-col">
-      <div className="relative aspect-square bg-muted overflow-hidden">
-        <img
-          src={img}
-          alt={p.images?.[0]?.alt || p.name}
-          width={800}
-          height={800}
-          loading="lazy"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).src = fallbackImg.src; }}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-        <div className="absolute top-3 left-3 flex flex-col gap-1">
-          {!p.licence_required && (
-            <span className="text-display text-[10px] tracking-widest px-2 py-1 rounded-sm bg-success text-success-foreground">
-              NO LICENCE
-            </span>
-          )}
-          {discount && (
-            <span className="text-display text-[10px] tracking-widest px-2 py-1 rounded-sm bg-primary text-primary-foreground">
-              -{discount}%
-            </span>
-          )}
-          {lowStock && (
-            <span className="text-display text-[10px] tracking-widest px-2 py-1 rounded-sm bg-warning text-warning-foreground">
-              ONLY {p.stock} LEFT
-            </span>
-          )}
-        </div>
-        <button
-          aria-label="Add to cart"
-          className="absolute bottom-3 right-3 w-10 h-10 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all hover:bg-primary hover:text-primary-foreground"
-        >
-          <ShoppingCart className="w-4 h-4" />
-        </button>
-      </div>
-      <div className="p-4 flex flex-col flex-1">
-        <div className="font-mono text-[10px] text-muted-foreground tracking-wider mb-1">
-          {p.brand?.toUpperCase()} • {p.sku}
-        </div>
-        <h3 className="font-semibold text-foreground line-clamp-2 mb-2 min-h-[2.5rem]">{p.name}</h3>
-        <div className="flex items-center gap-1 mb-3">
-          {[...Array(5)].map((_, i) => (
-            <Star key={i} className="w-3.5 h-3.5 fill-warning text-warning" />
-          ))}
-          <span className="text-xs text-muted-foreground ml-1">({reviewCount})</span>
-        </div>
-        <div className="flex items-baseline gap-2 mt-auto">
-          <span className="text-display text-xl text-foreground">{formatINR(p.price)}</span>
-          {p.compare_at_price && p.compare_at_price > p.price && (
-            <span className="text-xs text-muted-foreground line-through">{formatINR(p.compare_at_price)}</span>
-          )}
-        </div>
-      </div>
-    </Link>
-  );
-}
+import { ProductCard } from "./ProductCard";
 
 function SkeletonCard() {
   return (
